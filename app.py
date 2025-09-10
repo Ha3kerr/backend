@@ -1,17 +1,12 @@
-from flask import Flask, request, jsonify
-from flask_cors import CORS
+import json
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from email.mime.base import MIMEBase
 from email import encoders
 from datetime import datetime
-import os
 import base64
 import hashlib
-
-app = Flask(__name__)
-CORS(app)  # Allow React frontend to connect
 
 # Track submitted applications to prevent duplicates
 submitted_applications = set()
@@ -22,21 +17,39 @@ SMTP_PORT = 587
 EMAIL_ADDRESS = "alexandervoss43@gmail.com"
 EMAIL_PASSWORD = "raha essk rjlg srsq"  # Your app password
 
-@app.route('/send-application', methods=['POST'])
-def send_application():
+def handler(event, context):
+    # Handle CORS preflight
+    if event['httpMethod'] == 'OPTIONS':
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Access-Control-Allow-Origin': '*',
+                'Access-Control-Allow-Headers': 'Content-Type',
+                'Access-Control-Allow-Methods': 'POST, OPTIONS'
+            },
+            'body': ''
+        }
+    
     try:
-        # Get form data from React frontend
-        data = request.json
+        # Get form data from request
+        data = json.loads(event['body'])
         
         # Create unique hash for this application to prevent duplicates
         app_hash = hashlib.md5(f"{data.get('fullName', '')}{data.get('email', '')}{data.get('phone', '')}".encode()).hexdigest()
         
         # Check if already submitted
         if app_hash in submitted_applications:
-            return jsonify({
-                'success': False,
-                'message': 'Application already submitted for this person!'
-            }), 400
+            return {
+                'statusCode': 400,
+                'headers': {
+                    'Access-Control-Allow-Origin': '*',
+                    'Content-Type': 'application/json'
+                },
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Application already submitted for this person!'
+                })
+            }
         
         # Create email content
         subject = f"New Aviation Management Application - {data.get('fullName', 'Unknown')}"
@@ -128,21 +141,28 @@ Application submitted on: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         # Mark as submitted to prevent duplicates
         submitted_applications.add(app_hash)
         
-        return jsonify({
-            'success': True,
-            'message': 'Application sent successfully with resume attachment!'
-        })
+        return {
+            'statusCode': 200,
+            'headers': {
+                'Access-Control-Allow-Origin': '*',
+                'Content-Type': 'application/json'
+            },
+            'body': json.dumps({
+                'success': True,
+                'message': 'Application sent successfully with resume attachment!'
+            })
+        }
         
     except Exception as e:
         print(f"Error sending email: {str(e)}")
-        return jsonify({
-            'success': False,
-            'message': f'Failed to send application: {str(e)}'
-        }), 500
-
-@app.route('/health', methods=['GET'])
-def health_check():
-    return jsonify({'status': 'Backend is running!'})
-
-if __name__ == '__main__':
-    app.run(debug=True, port=5000)
+        return {
+            'statusCode': 500,
+            'headers': {
+                'Access-Control-Allow-Origin': '*',
+                'Content-Type': 'application/json'
+            },
+            'body': json.dumps({
+                'success': False,
+                'message': f'Failed to send application: {str(e)}'
+            })
+        }
